@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
+import fs from 'fs';
 
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { chromium } from 'playwright-extra';
@@ -182,6 +183,60 @@ ipcMain.on('ims:ui:ready', (evt) => {
   }
 });
 
+// ---------- 运行时长统计（本次运行 / 今日累计） ----------
+// 今日累计跨重启持久化：按日期存 JSON，进程运行期间每 30s 落盘一次，退出时再落一次。
+const runtimeStatsFile = path.join(process.cwd(), '.runtime-stats.json');
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const sessionStart = Date.now();
+let todaySeconds = (() => {
+  try {
+    const stats = JSON.parse(fs.readFileSync(runtimeStatsFile, 'utf-8'));
+    return stats.date === todayKey() ? Number(stats.seconds) || 0 : 0;
+  } catch {
+    return 0;
+  }
+})();
+
+function persistRuntimeStats() {
+  try {
+    fs.writeFileSync(
+      runtimeStatsFile,
+      JSON.stringify({ date: todayKey(), seconds: todaySeconds }),
+    );
+  } catch {
+    // 落盘失败不影响运行
+  }
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const formatDuration = (totalSeconds: number) => {
+  const s = Math.floor(totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+};
+
+// 每秒累加并推送到 UI；每 30 拍落盘一次
+let runtimeTick = 0;
+setInterval(() => {
+  todaySeconds += 1;
+  runtimeTick += 1;
+  if (runtimeTick % 30 === 0) persistRuntimeStats();
+  sendToUi('ims:runtime', {
+    session: Date.now() - sessionStart,
+    today: todaySeconds * 1000,
+    ts: Date.now(),
+  });
+}, 1000);
+
+process.on('exit', persistRuntimeStats);
+app.on('before-quit', persistRuntimeStats);
+// ---------- 运行时长统计结束 ----------
+
 ipcMain.on('ims:log', (evt, msg) => {
   console.log('[Renderer Log]', msg);
 });
@@ -274,11 +329,22 @@ async function connectToElectron() {
     }
   }, 60 * 1000);
 
-  const runner = await session.start();
-
-  await runner?.restart();
+  try {
+    const runner = await session.start();
+    // 原版这里会无差别再跑一遍（restart），第一遍正常跑完时纯属重复；
+    // 且第二遍抛出的异常无人捕获会导致进程静默退出。改为仅在第一遍
+    // 因异常提前结束时重试一次，并打印退出原因。
+    if (runner && typeof (runner as any).restart === 'function') {
+      await (runner as any).restart().catch((e: unknown) => {
+        console.error('[Main] 二次执行也失败，退出前记录原因:', e);
+      });
+    }
+  } catch (err) {
+    console.error('[Main] 课程执行流程异常退出:', err);
+  }
 
   clearInterval(completenessTimer);
+  console.log('[Main] 流程结束，应用退出。');
   app.exit();
 }
 

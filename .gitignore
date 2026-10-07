@@ -9,4 +9,4 @@
 package-lock.json
 yarn.lock
 .env
-.cookies.txt
+.cookies.txt.runtime-stats.json

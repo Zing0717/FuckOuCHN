@@ -74,6 +74,8 @@ window.addEventListener('DOMContentLoaded', () => {
       log: byId('ui-log'),
       compTable: byId('ui-completeness'),
       compUpdated: byId('ui-comp-updated'),
+      runtimeSession: byId('ui-runtime-session'),
+      runtimeToday: byId('ui-runtime-today'),
     };
 
     const state = {
@@ -230,6 +232,19 @@ window.addEventListener('DOMContentLoaded', () => {
       if (ui.compUpdated) {
         ui.compUpdated.textContent = `更新于 ${formatTime(payload?.ts ?? Date.now())}（每 60 秒刷新）`;
       }
+    });
+
+    ipcRenderer.on('ims:runtime', (_evt, payload) => {
+      const fmt = (ms) => {
+        const s = Math.floor((ms ?? 0) / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        const p = (n) => String(n).padStart(2, '0');
+        return `${p(h)}:${p(m)}:${p(sec)}`;
+      };
+      if (ui.runtimeSession) ui.runtimeSession.textContent = fmt(payload?.session);
+      if (ui.runtimeToday) ui.runtimeToday.textContent = fmt(payload?.today);
     });
 
     // initial render

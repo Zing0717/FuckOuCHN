@@ -955,7 +955,12 @@ export const ims = {
       async start() {
         return await runner
           .start(await login(browser, config))
-          .catch(() => runner);
+          .catch((e) => {
+            // 原版直接吞掉异常（.catch(() => runner)），主进程无法感知失败原因。
+            // 这里打印后仍返回 runner 以兼容原有 restart 流程。
+            console.error(chalk.bgRed('[Core] 课程执行流程抛出异常，将触发二次执行:'), e);
+            return runner;
+          });
       },
     };
   },

@@ -546,6 +546,13 @@ export default class ExamProc implements Processor {
     // check subject summary
     const { subjects } = await exam.getSubjectsSummary(true);
 
+    // 平台对部分小测验（如"边学边练"）可能不返回 subjects，
+    // 此时无法解析题目，跳过该考试而不是让整个课程组崩溃。
+    if (!Array.isArray(subjects)) {
+      console.warn(chalk.yellow('⚠️ 试卷摘要中缺少 subjects 字段，无法解析题目，跳过该考试'));
+      return { ok: false, reason: '试卷摘要缺少 subjects（平台未返回题目数据）' };
+    }
+
     const typeNames = subjects.flatMap((s) =>
       s.type != 'text' ? (s2s[s.type] ?? s.type) : [],
     );

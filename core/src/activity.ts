@@ -15,9 +15,14 @@ async function getActivities(): Promise<ActivityInfo[]> {
   const data = resp.data;
   if (!data || !Array.isArray(data.courses)) {
     //console.warn('getMyCourses 返回数据结构异常:', data);
-    return [];
+    throw new Error('my-courses 返回数据结构异常：会话可能已失效，需要重新登录');
   }
   const { courses } = data;
+  if (courses.length === 0) {
+    // 在册课程不可能为 0：返回空列表几乎总是 API 被重定向到登录页（会话失效）。
+    // 抛错让上层可见，避免"静默跑完退出"。
+    throw new Error('my-courses 返回空列表：会话可能已失效，需要重新登录');
+  }
   return courses.map((course: any) => ({
     id: course.id,
     title: course.name,
