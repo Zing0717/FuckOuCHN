@@ -1,8 +1,15 @@
-# FuckOuCHN
+# FuckOuCHN（AI 维护二改版）
 
 > 国开自动刷课程序 - 基于 Node.js、Electron 和 Playwright
 
 一款自动化刷课工具，支持视频播放、自动答题、并发处理等功能。
+
+## 📌 关于本二改版（重要说明）
+
+- 本项目**转载/二改自原作者 [NekoMirra](https://github.com/NekoMirra) 的仓库 [NekoMirra/FuckOuCHN](https://github.com/NekoMirra/FuckOuCHN)**，原作者仓库长期未维护更新。
+- 原版已停止维护，本仓库由 **AI 辅助维护更新**：修复已知 Bug、适配国开平台的接口变动，并按使用需求增加新功能。
+- 本项目沿用原仓库的 [MIT License](LICENSE)，感谢原作者的贡献。
+- 新增/修复内容见文末「二改版改动清单」。
 
 ## ✨ 功能特性
 
@@ -10,8 +17,19 @@
 - 📝 **AI 自动答题** - 支持单选、多选、判断、简答等题型
 - 🚀 **并发刷课** - 多窗口并行处理，效率翻倍
 - 📊 **进度面板** - 实时显示刷课进度
+- 📈 **平台真实完成度** - 每 60 秒从国开服务器拉取各课程完成百分比，平台算完才算完
+- 📏 **最短耗时优先** - 自动按"剩余活动量"升序安排课程，内容最少的课最先刷完
 - 🛡️ **风控检测** - 自动检测账号封禁状态
 - 📄 **PDF 自动浏览** - 自动滚动资料页面
+
+## 📋 二改版改动清单（相对原版）
+
+1. **修复视频进度上报 404**：`activities-read` 接口改为 `POST /course/activities-read/{activityId}` 并携带 `{start, end}` 观看秒数。原版旧路径返回 404，平台不记录进度，导致每次重启都从头刷。
+2. **修复登录后卡死**：登录成功判定改为 URL 前缀匹配，兼容国开 `?locale=en` 英文环境跳转（原版精确匹配会永远等待）。
+3. **新增平台真实完成度面板**：进度面板每 60 秒轮询国开 `my-completeness` 接口，显示每门课「已完成/总数 + 百分比」，数据来自平台服务器而非本地计数。
+4. **课程组最短耗时优先排序**：启动时统计各课程剩余未完成活动量，剩余最少的课最先整体刷完。
+5. **应用菜单汉化**：文件/编辑/视图/窗口/帮助。
+6. **强制中文环境**：Chromium 以 `zh-CN` 启动，避免国开站点跳转英文页面影响自动化。
 
 ## 📦 快速开始
 
@@ -31,7 +49,7 @@ npm install -g yarn --registry=https://registry.npmmirror.com
 #### 2. 克隆项目
 
 ```bash
-git clone https://github.com/NekoMirra/FuckOuCHN.git
+git clone https://github.com/YOUR_NAME/FuckOuCHN.git  # 换成本仓库地址
 cd FuckOuCHN
 ```
 
