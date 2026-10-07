@@ -72,6 +72,8 @@ window.addEventListener('DOMContentLoaded', () => {
       last: byId('ui-last'),
       workers: byId('ui-workers'),
       log: byId('ui-log'),
+      compTable: byId('ui-completeness'),
+      compUpdated: byId('ui-comp-updated'),
     };
 
     const state = {
@@ -203,6 +205,31 @@ window.addEventListener('DOMContentLoaded', () => {
       }
 
       render();
+    });
+
+    ipcRenderer.on('ims:completeness', (_evt, payload) => {
+      const rows = payload?.rows ?? [];
+      if (!ui.compTable) return;
+      if (rows.length === 0) return;
+      const html = rows
+        .map((r) => {
+          if (!r.ok) {
+            return `<tr><td>${r.courseId}</td><td colspan="2" class="muted">查询失败</td></tr>`;
+          }
+          const pct = Number(r.completeness ?? 0);
+          const good = pct >= 100 ? 'good' : pct > 0 ? 'warn' : '';
+          return (
+            `<tr><td>${r.courseId}</td>` +
+            `<td>${r.completedCount} / ${r.totalActivities}</td>` +
+            `<td><b class="${good}">${pct.toFixed(2)}%</b>` +
+            `<div class="bar" style="height:6px;margin-top:4px"><i style="width:${Math.min(100, pct)}%"></i></div></td></tr>`
+          );
+        })
+        .join('');
+      ui.compTable.innerHTML = html;
+      if (ui.compUpdated) {
+        ui.compUpdated.textContent = `更新于 ${formatTime(payload?.ts ?? Date.now())}（每 60 秒刷新）`;
+      }
     });
 
     // initial render

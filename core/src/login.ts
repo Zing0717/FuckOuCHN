@@ -67,7 +67,11 @@ async function login(browser: Browser, config: LoginConfig) {
   }
 
   // 等待跳转到主页
-  await page.waitForURL(config.homeApi, { timeout: 1000 * 60 * 5 });
+  // 站点可能附加 locale 等查询参数（如 ?locale=en），精确匹配会永远等不到，这里用前缀匹配
+  const homeBase = config.homeApi.split('#')[0].replace(/\?.*$/, '');
+  await page.waitForURL((url) => url.href.startsWith(homeBase), {
+    timeout: 1000 * 60 * 5,
+  });
 
   return page;
 }

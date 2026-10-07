@@ -40,7 +40,7 @@ type RunnerProgressEvent =
     total: number;
     course: Pick<
       CourseInfo,
-      'moduleName' | 'syllabusName' | 'activityName' | 'type' | 'progress' | 'activityId'
+      'moduleName' | 'syllabusName' | 'activityName' | 'type' | 'progress' | 'activityId' | 'courseId'
     >;
     ts: number;
   }
@@ -50,7 +50,7 @@ type RunnerProgressEvent =
     workerTag?: string;
     index: number;
     total: number;
-    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId'>;
+    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId' | 'courseId'>;
     ts: number;
   }
   | {
@@ -60,7 +60,7 @@ type RunnerProgressEvent =
     index: number;
     total: number;
     reason: string;
-    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId'>;
+    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId' | 'courseId'>;
     ts: number;
   }
   | {
@@ -70,7 +70,7 @@ type RunnerProgressEvent =
     index: number;
     total: number;
     message: string;
-    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId'>;
+    course: Pick<CourseInfo, 'activityName' | 'type' | 'activityId' | 'courseId'>;
     ts: number;
   };
 
@@ -247,6 +247,37 @@ class IMSRunner {
 
     const listItems = await Activity.getActivities();
     const selected = await this.selectCourseGroup(listItems);
+
+    // 按“剩余未完成活动量”升序排列课程组：内容最少的课最先整体刷完，
+    // 大头留到最后（短线优先，尽快看到完成科目）。
+    if (selected.length > 1) {
+      console.log(chalk.gray('📏 正在统计各课程剩余活动量，以便按“最短耗时优先”排序...'));
+      const CourseApi = (await import('./api/course.js')).default;
+      const remaining = new Map<number, number>();
+      await Promise.all(
+        selected.map(async (item) => {
+          try {
+            const r = await CourseApi.getCourseCompletenessById(item.id);
+            remaining.set(item.id, Math.max(0, r.totalActivities - r.completedCount));
+            console.log(
+              chalk.gray(
+                `  - ${item.title}: 剩余 ${Math.max(0, r.totalActivities - r.completedCount)} 项（${r.completedCount}/${r.totalActivities}）`,
+              ),
+            );
+          } catch {
+            // 查询失败不参与排序，保持原相对顺序（稳定排序保证）
+          }
+        }),
+      );
+      if (remaining.size > 0) {
+        selected.sort(
+          (a, b) =>
+            (remaining.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+            (remaining.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+        );
+        console.log(chalk.gray(`📐 执行顺序: ${selected.map((s) => s.title).join(' → ')}`));
+      }
+    }
 
     // 自动导航到我的课程页，确保课程列表/SPA 状态已就绪（可解决某些页面跳转后定位问题）
     if (selected.length > 0) {
@@ -708,6 +739,7 @@ class IMSRunner {
         type: course.type,
         progress: course.progress,
         activityId: course.activityId,
+        courseId: course.courseId,
       },
       ts: Date.now(),
     });
@@ -743,6 +775,7 @@ class IMSRunner {
           activityName: course.activityName,
           type: course.type,
           activityId: course.activityId,
+          courseId: course.courseId,
         },
         ts: Date.now(),
       });
@@ -761,6 +794,7 @@ class IMSRunner {
           activityName: course.activityName,
           type: course.type,
           activityId: course.activityId,
+          courseId: course.courseId,
         },
         ts: Date.now(),
       });
@@ -789,6 +823,7 @@ class IMSRunner {
           activityName: course.activityName,
           type: course.type,
           activityId: course.activityId,
+          courseId: course.courseId,
         },
         ts: Date.now(),
       });
@@ -813,6 +848,7 @@ class IMSRunner {
             activityName: course.activityName,
             type: course.type,
             activityId: course.activityId,
+            courseId: course.courseId,
           },
           ts: Date.now(),
         });
@@ -834,6 +870,7 @@ class IMSRunner {
         activityName: course.activityName,
         type: course.type,
         activityId: course.activityId,
+        courseId: course.courseId,
       },
       ts: Date.now(),
     });

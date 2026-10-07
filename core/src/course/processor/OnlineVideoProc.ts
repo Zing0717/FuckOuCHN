@@ -8,6 +8,9 @@ import Config from '../../config.js';
 export default class OnlineVideoProc implements Processor {
   name: CourseType = 'online_video';
 
+  // 最近一次播放的视频总时长（秒），用于上报 activities-read 的 end
+  private lastDurationSeconds: number | null = null;
+
   async exec(page: Page) {
     await waitForSPALoaded(page);
 
@@ -26,6 +29,7 @@ export default class OnlineVideoProc implements Processor {
 
     await this.preparePlayback(page, mediaType);
     const totalSeconds = this.timeStringToNumber(end);
+    this.lastDurationSeconds = totalSeconds;
     const progress = this.createProgress(
       this.timeStringToNumber(start),
       totalSeconds,
@@ -63,21 +67,14 @@ export default class OnlineVideoProc implements Processor {
         // 动态导入以避免循环依赖问题
         const CourseApi = await import('../../api/course.js');
         let readCalled = false;
-        const triedTypes = ['learning_activity', 'online_video'];
-        for (const t of triedTypes) {
-          try {
-            await CourseApi.default.activitiesRead(t as any, activityId);
-            console.log(`✅ 已通知后端活动已阅读: ${activityId} (type=${t})`);
-            readCalled = true;
-            break;
-          } catch (err: any) {
-            const msg = (err as any)?.message ?? String(err);
-            if (msg.includes('404')) {
-              console.warn(`⚠️ activitiesRead ${t} 404 - 尝试下一个类型`);
-              continue; // 尝试下一个类型
-            }
-            console.warn('⚠️ activitiesRead 调用失败:', msg);
-          }
+        try {
+          // end 传视频总秒数，平台按观看时长判定完成
+          const endSeconds = Math.round(this.lastDurationSeconds ?? 0) || 1;
+          await CourseApi.default.activitiesRead('online_video' as any, activityId, endSeconds);
+          console.log(`✅ 已通知后端活动已阅读: ${activityId} (end=${endSeconds}s)`);
+          readCalled = true;
+        } catch (err: any) {
+          console.warn('⚠️ activitiesRead 调用失败:', (err as any)?.message ?? String(err));
         }
 
         if (!readCalled) {

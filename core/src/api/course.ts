@@ -128,10 +128,15 @@ async function getAllActivities(
  * @param id
  * @returns BENSESSCC_TAG session
  */
-function activitiesRead(courseType: CourseType, id: number) {
+function activitiesRead(courseType: CourseType, id: number, endSeconds?: number) {
   return new Promise<AxiosResponse>((resolve, reject) => {
     // 限制 Qps
-    Api.post(`course/activities-read/${courseType}/${id}`)
+    // 正确接口为 POST /course/activities-read/{activityId}，body 传 {start, end}（秒）。
+    // 旧写法 course/activities-read/{type}/{id} 会 404，导致平台不记录完成进度。
+    Api.post(`course/activities-read/${id}`, {
+      start: 0,
+      end: endSeconds ?? 1,
+    })
       .then((v) => setTimeout(() => resolve(v), 5000))
       .catch(reject);
   });
@@ -376,12 +381,30 @@ async function getUncompletedActivitiesFast(courseId: number): Promise<{
   };
 }
 
+/**
+ * 获取指定课程的平台真实完成度（study_completeness 为百分比，如 0.3 表示 0.3%）
+ */
+async function getCourseCompletenessById(courseId: number): Promise<{
+  completeness: number;
+  completedCount: number;
+  totalActivities: number;
+}> {
+  const resp = await Api.get(`course/${courseId}/my-completeness`);
+  const data = resp.data ?? {};
+  return {
+    completeness: data.study_completeness ?? 0,
+    completedCount: data.completed_result?.total_completed ?? 0,
+    totalActivities: data.completed_result?.total_activities ?? 0,
+  };
+}
+
 export default {
   activitiesRead,
   getCourseModules,
   getMyCourses,
   getAllActivities,
   getCourseCompleteness,
+  getCourseCompletenessById,
   getActivityReadsForUser,
   getUncompletedActivitiesFast,
 };

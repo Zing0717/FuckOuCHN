@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -246,18 +246,113 @@ async function connectToElectron() {
   });
 
   // 转发 core 的进度事件到 UI
+  const knownCourseIds = new Set<number>();
   session.onProgress((e: RunnerProgressEvent) => {
+    const cid = (e as any)?.course?.courseId;
+    if (typeof cid === 'number' && cid > 0) knownCourseIds.add(cid);
     sendToUi('ims:progress', e);
   });
+
+  // 每 60s 轮询国开平台的真实完成度（my-completeness），推送到 UI 面板
+  const completenessTimer = setInterval(async () => {
+    if (knownCourseIds.size === 0) return;
+    try {
+      const CourseApi = (await import('@ims-tech-auto/core/api/course.js')).default;
+      const rows = await Promise.all(
+        [...knownCourseIds].map(async (id) => {
+          try {
+            const r = await CourseApi.getCourseCompletenessById(id);
+            return { courseId: id, ...r, ok: true };
+          } catch {
+            return { courseId: id, ok: false };
+          }
+        }),
+      );
+      sendToUi('ims:completeness', { rows, ts: Date.now() });
+    } catch (err) {
+      console.warn('[Completeness] 轮询失败:', (err as any)?.message ?? err);
+    }
+  }, 60 * 1000);
 
   const runner = await session.start();
 
   await runner?.restart();
 
+  clearInterval(completenessTimer);
   app.exit();
 }
 
-app.whenReady().then(createWindow);
+function buildChineseMenu() {
+  const isMac = process.platform === 'darwin';
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{ role: 'appMenu' as const }] : []),
+    {
+      label: '文件',
+      submenu: [
+        { role: 'reload', label: '刷新页面' },
+        { role: 'forceReload', label: '强制刷新' },
+        { type: 'separator' },
+        { role: 'quit', label: '退出' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { role: 'resetZoom', label: '恢复缩放' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏切换' },
+        { role: 'toggleDevTools', label: '开发者工具' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'close', label: '关闭窗口' },
+      ],
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '关于',
+          click: () => {
+            const win = new BrowserWindow({ width: 360, height: 200, show: true, autoHideMenuBar: false });
+            win.loadURL(
+              'data:text/html;charset=utf-8,' +
+                encodeURIComponent(
+                  '<body style="font-family:sans-serif;text-align:center;padding-top:50px"><h2>ImsTechAuto</h2><p>国开自动刷课工具（FuckOuCHN）</p></body>',
+                ),
+            );
+          },
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// 强制 Chromium 以中文环境启动，避免国开站点跳转到 ?locale=en 页面
+app.commandLine.appendSwitch('lang', 'zh-CN');
+
+app.whenReady().then(() => {
+  buildChineseMenu();
+  createWindow();
+});
 
 app.on('window-all-closed', async () => {
   app.quit();
