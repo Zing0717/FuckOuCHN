@@ -2,7 +2,7 @@ import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import fs from 'fs';
 
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } from 'electron';
 import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -27,6 +27,80 @@ if (!gotTheLock) {
 
 let uiWindow: BrowserWindow | null = null;
 const automationWindows: BrowserWindow[] = [];
+let tray: Tray | null = null;
+// 真正退出应用时置为 true，用于区分"关闭窗口最小化到托盘"与"退出程序"
+let isQuitting = false;
+// 运行时开关：关闭窗口时是否最小化到托盘（默认读 _MINIMIZE_TO_TRAY，可在托盘菜单切换）
+let minimizeToTray = (() => {
+  const raw = String(process.env._MINIMIZE_TO_TRAY ?? '1').trim().toLowerCase();
+  return raw !== '0' && raw !== 'false' && raw !== 'no' && raw !== 'off';
+})();
+
+// 恢复显示窗口
+function showAllWindows() {
+  for (const w of [uiWindow, ...automationWindows]) {
+    if (w && !w.isDestroyed()) w.show();
+  }
+  if (uiWindow && !uiWindow.isDestroyed()) {
+    uiWindow.focus();
+  }
+}
+
+// 创建右下角托盘图标及菜单
+function createTray() {
+  if (tray) return;
+  let icon: Electron.NativeImage;
+  try {
+    const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+    icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) throw new Error('icon empty');
+  } catch {
+    // 兜底：用内置空图，避免托盘创建失败导致崩溃
+    icon = nativeImage.createEmpty();
+  }
+  tray = new Tray(icon);
+  tray.setToolTip('国开刷课（FuckOuCHN）');
+
+  const rebuildMenu = () => {
+    if (!tray) return;
+    const menu = Menu.buildFromTemplate([
+      { label: '显示主窗口', click: () => showAllWindows() },
+      { type: 'separator' },
+      {
+        label: '关闭时最小化到托盘',
+        type: 'checkbox',
+        checked: minimizeToTray,
+        click: (item) => {
+          minimizeToTray = item.checked;
+          console.log(`[Tray] 关闭时最小化到托盘：${minimizeToTray ? '开启' : '关闭'}`);
+          rebuildMenu();
+        },
+      },
+      { type: 'separator' },
+      {
+        label: '退出',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+    tray.setContextMenu(menu);
+  };
+  rebuildMenu();
+  // 双击托盘图标恢复窗口
+  tray.on('double-click', () => showAllWindows());
+}
+
+// 给窗口挂上"关闭即最小化到托盘"的行为
+function attachMinimizeToTray(w: BrowserWindow) {
+  w.on('close', (e) => {
+    if (isQuitting) return; // 真正退出时放行
+    if (!minimizeToTray) return; // 开关关闭时按正常关闭处理
+    e.preventDefault();
+    w.hide();
+  });
+}
 
 let uiReady = false;
 const bufferedProgress: RunnerProgressEvent[] = [];
@@ -58,8 +132,9 @@ function getShowWorkers() {
 }
 
 function getUiTopMost() {
-  const raw = String(process.env._UI_TOPMOST ?? '1').trim();
-  return raw !== '0' && raw.toLowerCase() !== 'false';
+  // 默认不置顶；需要置顶时在 .env 设 _UI_TOPMOST=1
+  const raw = String(process.env._UI_TOPMOST ?? '0').trim();
+  return raw === '1' || raw.toLowerCase() === 'true';
 }
 
 app.on('second-instance', () => {
@@ -109,6 +184,7 @@ async function createWindow() {
     automationWindows.push(w);
     await w.loadFile(path.join(__dirname, '/automation.html'));
     w.webContents.setAudioMuted(true);
+    attachMinimizeToTray(w);
   }
 
   // 2) 再创建 UI 窗口（只显示进度，不参与自动化）
@@ -128,6 +204,7 @@ async function createWindow() {
 
   await uiWindow.loadFile(path.join(__dirname, '/index.html'));
   uiWindow.webContents.setAudioMuted(true);
+  attachMinimizeToTray(uiWindow);
 
   if (uiTopMost) {
     // Windows 下让 UI 更不容易被覆盖
@@ -417,9 +494,17 @@ app.commandLine.appendSwitch('lang', 'zh-CN');
 
 app.whenReady().then(() => {
   buildChineseMenu();
+  createTray();
   createWindow();
 });
 
+app.on('before-quit', () => {
+  // 标记为真正退出，让窗口 close 事件放行
+  isQuitting = true;
+});
+
 app.on('window-all-closed', async () => {
+  // 启用托盘时，窗口全关不退出，程序继续在后台刷课
+  if (minimizeToTray && !isQuitting) return;
   app.quit();
 });

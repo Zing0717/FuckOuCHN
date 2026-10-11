@@ -18,7 +18,10 @@
       "automation.html",
       "preload.js",
       "package.json",
+      "assets/**/*",
       "!**/.cookies.txt",
+      "!**/.env",
+      "!**/.runtime-stats.json",
       "!**/test-results",
       "!**/tests"
     ],
