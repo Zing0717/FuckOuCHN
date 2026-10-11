@@ -10,7 +10,7 @@ import { ims } from '@ims-tech-auto/core';
 import type { RunnerProgressEvent } from '@ims-tech-auto/core';
 import AIModel from '@ims-tech-auto/core/ai/AIModel.js';
 import HumanBehaviorPlugin from '@ims-tech-auto/core/plugins/HumanBehaviorPlugin.js';
-import Config, { printConfigStatus } from '@ims-tech-auto/core/config.js';
+import Config, { printConfigStatus, dataDir } from '@ims-tech-auto/core/config.js';
 
 // 打印功能开关状态
 printConfigStatus();
@@ -185,7 +185,7 @@ ipcMain.on('ims:ui:ready', (evt) => {
 
 // ---------- 运行时长统计（本次运行 / 今日累计） ----------
 // 今日累计跨重启持久化：按日期存 JSON，进程运行期间每 30s 落盘一次，退出时再落一次。
-const runtimeStatsFile = path.join(process.cwd(), '.runtime-stats.json');
+const runtimeStatsFile = path.join(dataDir, '.runtime-stats.json');
 const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

@@ -1,5 +1,35 @@
 import chalk from 'chalk';
-import 'dotenv/config';
+import path from 'path';
+import fs from 'fs';
+import { createRequire } from 'module';
+import { config as dotenvRaw } from 'dotenv';
+
+const require = createRequire(import.meta.url);
+
+// 数据目录锚定：优先 exe 所在真实目录（electron-builder portable 的 cwd 是临时解压目录，
+// 直接用 cwd 会导致 .env/.cookies.txt 丢失，表现为 exe 无法自动登录）。
+// 源码运行（electron ./dist/src）时 app.isPackaged=false，回退到 cwd。
+let dataDir = process.cwd();
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { app } = require('electron');
+  if (app?.isPackaged && process.env.PORTABLE_EXECUTABLE_DIR) {
+    dataDir = process.env.PORTABLE_EXECUTABLE_DIR;
+  }
+} catch {
+  // 非 Electron 环境保持 cwd
+}
+
+// 先加载 exe 目录下的 .env（存在才加载，避免覆盖已有环境变量优先级）
+const envPath = path.join(dataDir, '.env');
+if (fs.existsSync(envPath)) {
+  dotenvRaw({ path: envPath });
+} else {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('dotenv').config();
+}
+
+export { dataDir };
 
 const BASE_SSO_URL = 'https://iam.pt.ouchn.cn/am';
 

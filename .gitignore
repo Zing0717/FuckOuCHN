@@ -5,8 +5,8 @@
 /**/.idea
 /**/.VSCodeCounter
 /**/out
-
 package-lock.json
 yarn.lock
 .env
-.cookies.txt.runtime-stats.json
+.cookies.txt
+.runtime-stats.json

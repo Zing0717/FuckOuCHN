@@ -3,8 +3,10 @@ import { Browser, Cookie } from 'playwright';
 import * as fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import { dataDir } from './config.js';
 
-const cookieFilename = path.join(process.cwd(), '.cookies.txt');
+// Cookie 存放在数据目录（exe 模式下为 exe 所在文件夹），确保跨启动可复用
+const cookieFilename = path.join(dataDir, '.cookies.txt');
 
 interface LoginConfig {
   account?: string;
