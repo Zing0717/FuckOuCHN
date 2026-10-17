@@ -1,7 +1,6 @@
 import { AxiosError, HttpStatusCode } from 'axios';
 import chalk from 'chalk';
 import { Page } from 'playwright';
-import { exit } from 'process';
 import { sleep } from 'openai/core.js';
 
 import { Processor } from '../processor.js';
@@ -72,8 +71,8 @@ export default class ExamProc implements Processor {
       const cookies = response.headers['set-cookie'];
 
       if (!cookies) {
-        console.error(chalk.red('获取Cookie失败: 未知错误'));
-        exit();
+        // 原实现直接 exit() 会杀掉整个程序；改为抛错，交给上层重试/跳过
+        throw new Error('获取考试 Cookie 失败：activitiesRead 未返回 set-cookie');
       }
 
       exam.addCookies(
@@ -94,8 +93,8 @@ export default class ExamProc implements Processor {
       );
 
       if (!submissionId) {
-        console.log('意料之外的错误:', "can't get submissionId");
-        exit();
+        // 原实现直接 exit() 会杀掉整个程序；改为抛错，交给上层重试/跳过
+        throw new Error("无法获取 submissionId（submissions/storage 未返回 id）");
       }
 
       // 批量获取 AI 答案
@@ -483,21 +482,32 @@ export default class ExamProc implements Processor {
     // 收集正确 或错误答案
     // 需要注意的是, 如果是多选题, 我们无法知道哪些选项是错误的, 哪些是正确的
     for (const { subject_id, answer_option_ids } of submission_data.subjects) {
-      const { options } = subjects.find(({ id }) => id == subject_id)!;
+      const resolver = subjectResolverList[subject_id];
+      // 历史提交里可能引用未注册 resolver 的题目（例如 cloze 父题、
+      // 或本次试卷未展开的题目），此时跳过而不是让整个考试崩溃。
+      if (!resolver) {
+        console.warn(`⚠️ 跳过未注册解析器的题目: ${subject_id}（无法收集历史答案）`);
+        continue;
+      }
+
+      const subject = subjects.find(({ id }) => id == subject_id);
+      if (!subject) {
+        console.warn(`⚠️ 提交记录中的题目不在试卷内: ${subject_id}，跳过`);
+        continue;
+      }
+
+      const { options } = subject;
       const score = Number(submission_score_data[subject_id]); //百分比
 
       let filterOpts = answer_option_ids;
 
       if (score != 0) {
-        filterOpts = options.flatMap(({ id }) =>
+        filterOpts = (options ?? []).flatMap(({ id }) =>
           answer_option_ids.includes(id) ? [] : id,
         );
       }
 
-      await subjectResolverList[subject_id]!.addAnswerFilter(
-        score,
-        ...filterOpts,
-      );
+      await resolver.addAnswerFilter(score, ...filterOpts);
     }
   }
 

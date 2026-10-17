@@ -70,10 +70,20 @@ function newAxiosInstance(url: string = '') {
   axiosInstance.interceptors.response.use(async (response) => {
     switch (response.status) {
       case HttpStatusCode.Found:
-      case HttpStatusCode.BadRequest:
-        console.error(response.data.message ?? response.data);
+        // 302 通常是被重定向到登录页（会话失效），属于致命错误，提示后退出。
+        console.error(response.data?.message ?? response.data);
         console.warn('获取信息失败', '需要登陆?');
         exit();
+      case HttpStatusCode.BadRequest:
+        // 400 不一定代表会话失效：提交答案、提交试卷等接口会因参数/状态校验返回 400。
+        // 原实现直接 exit() 会让整个程序被杀掉（表现为"跑着跑着自己退出"）。
+        // 这里改为抛出错误，交给上层的重试/跳过逻辑处理。
+        console.warn('请求返回 400:', response.config?.url);
+        throw new Error(
+          `HTTP 400: ${response.config?.url ?? ''} ${
+            response.data?.message ?? response.data?.error ?? ''
+          }`.trim(),
+        );
     }
     return response;
   });

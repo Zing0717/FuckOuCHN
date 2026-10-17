@@ -137,13 +137,19 @@ class ErrorWithRetry {
     private maxCnt: number,
   ) { }
 
-  async run(task: () => Promise<void> | void) {
+  /**
+   * 执行任务并在失败时重试。
+   * @returns true 表示最终成功，false 表示所有重试均失败。
+   * 调用方必须检查返回值，避免把失败当作完成（原实现失败后静默返回，
+   * 导致上层继续发 "完成" 事件，失败的活动被误报为已完成且不再重试）。
+   */
+  async run(task: () => Promise<void> | void): Promise<boolean> {
     let lastError: any;
 
     for (let i = 0; i < this.maxCnt; i++) {
       try {
         await task();
-        return; // 成功则退出
+        return true; // 成功
       } catch (e) {
         lastError = e;
         console.warn(
@@ -164,6 +170,7 @@ class ErrorWithRetry {
     // 所有重试都失败
     console.error(`任务: ${this.taskName} 执行失败, 并且达到最大重试次数.`);
     await this.failedTask(lastError);
+    return false;
   }
 
   failed(callback: (e: any) => Promise<void> | void) {

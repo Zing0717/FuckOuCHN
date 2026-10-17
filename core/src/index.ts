@@ -830,7 +830,7 @@ class IMSRunner {
       return;
     }
 
-    await errorWithRetry(`处理课程: ${course.activityName}`, 3)
+    const succeeded = await errorWithRetry(`处理课程: ${course.activityName}`, 3)
       .retry(async () => {
         await page.reload({ timeout: 60000 });
       })
@@ -857,6 +857,12 @@ class IMSRunner {
         await waitForSPALoaded(page);
         await processor.exec(page);
       });
+
+    // 失败的活动不能再发 "完成"，否则平台侧未完成的项会被误标为已完成且不再重试
+    if (!succeeded) {
+      console.warn(`⚠️ 活动最终失败，标记为未完成: ${course.activityName}`);
+      return;
+    }
 
     await this.goBackToCourseList(page);
 
