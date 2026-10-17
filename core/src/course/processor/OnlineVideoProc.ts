@@ -4,6 +4,7 @@ import ProgressBar from 'progress';
 import { CourseType, Processor } from '../processor.js';
 import { waitForSPALoaded } from '../../utils.js';
 import Config from '../../config.js';
+import { isPaused } from '../../pause.js';
 
 export default class OnlineVideoProc implements Processor {
   name: CourseType = 'online_video';
@@ -222,8 +223,36 @@ export default class OnlineVideoProc implements Processor {
   private monitorPlayback(page: Page) {
     let lastCur = -1;
     let stableCount = 0;
+    let wasPausedByUser = false;
     const interval = setInterval(async () => {
       try {
+        // 用户暂停：真正停住视频（释放带宽），并跳过自动恢复逻辑
+        if (isPaused()) {
+          if (!wasPausedByUser) {
+            wasPausedByUser = true;
+            await page
+              .evaluate(() => {
+                const el = document.querySelector('video') || document.querySelector('audio');
+                if (el) (el as HTMLMediaElement).pause();
+              })
+              .catch(() => void 0);
+          }
+          stableCount = 0;
+          return;
+        }
+        if (wasPausedByUser) {
+          // 用户恢复：继续播放
+          wasPausedByUser = false;
+          await page
+            .evaluate(async () => {
+              const el = document.querySelector('video') || document.querySelector('audio');
+              if (el) await (el as HTMLMediaElement).play().catch(() => void 0);
+            })
+            .catch(() => void 0);
+          lastCur = -1;
+          return;
+        }
+
         const state = await page.evaluate(() => {
           const el = document.querySelector('video') || document.querySelector('audio');
           if (!el) return { cur: -1, paused: true, ready: 0, ended: false };
@@ -368,6 +397,11 @@ export default class OnlineVideoProc implements Processor {
     let started = false;
 
     while (Date.now() - startAt < startTimeoutMs) {
+      // 暂停时冻结等待计时（暂停会主动暂停视频，不应算作"启动超时"）
+      if (isPaused()) {
+        await page.waitForTimeout(pollIntervalMs);
+        break;
+      }
       try {
         const state = await page.evaluate(({ mediaType }) => {
           const el = document.querySelector(mediaType) as HTMLMediaElement | null;
@@ -396,11 +430,17 @@ export default class OnlineVideoProc implements Processor {
     // 再等待播放结束：优先用 ended 属性
     // 若 el.ended 不可靠，则要求连续两次（>=2s）满足接近结束且处于可播放状态
     const maxConfirmWaitMs = 5 * 60 * 1000; // 最多等待 5 分钟以确认结束
-    const confirmStart = Date.now();
+    let confirmStart = Date.now();
 
     let consecutiveConfirm = 0;
 
     while (Date.now() - confirmStart < maxConfirmWaitMs) {
+      // 暂停时冻结等待计时，避免暂停期间被判定为"等待超时"
+      if (isPaused()) {
+        await page.waitForTimeout(1000);
+        confirmStart += 1000;
+        continue;
+      }
       try {
         const check = await page.evaluate(() => {
           const el = document.querySelector('video') as HTMLVideoElement | null;

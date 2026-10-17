@@ -318,6 +318,29 @@ ipcMain.on('ims:log', (evt, msg) => {
   console.log('[Renderer Log]', msg);
 });
 
+// ---------- 暂停 / 继续 ----------
+// UI 按钮点击 -> 切换 core 的暂停闸门，并把最新状态广播回 UI。
+ipcMain.on('ims:pause:toggle', async () => {
+  try {
+    const core = await import('@ims-tech-auto/core');
+    const paused = core.togglePause();
+    console.log(`[Pause] 刷课${paused ? '已暂停' : '已继续'}`);
+    sendToUi('ims:pause:state', { paused });
+  } catch (err) {
+    console.error('[Pause] 切换失败:', (err as any)?.message ?? err);
+  }
+});
+
+ipcMain.on('ims:pause:query', async () => {
+  try {
+    const core = await import('@ims-tech-auto/core');
+    sendToUi('ims:pause:state', { paused: core.isPaused() });
+  } catch {
+    /* ignore */
+  }
+});
+// ---------- 暂停 / 继续结束 ----------
+
 async function waitForCDP(url: string, timeout = 10000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {

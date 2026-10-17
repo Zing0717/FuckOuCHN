@@ -187,6 +187,33 @@
         color: var(--muted);
       }
 
+      .pause-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: var(--panel2);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: var(--sans);
+        cursor: pointer;
+        transition: background 150ms ease, border-color 150ms ease;
+        white-space: nowrap;
+      }
+
+      .pause-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .pause-btn.paused {
+        background: rgba(246, 195, 67, 0.20);
+        border-color: var(--warn);
+        color: var(--warn);
+      }
+
       @media (max-width: 980px) {
         .grid {
           grid-template-columns: 1fr;
@@ -216,6 +243,10 @@
           <span class="muted">| 今日</span>
           <b id="ui-runtime-today">00:00:00</b>
         </div>
+        <button id="ui-pause-btn" class="pause-btn" title="一键暂停/继续刷课（暂停后不占网速）">
+          <span id="ui-pause-icon">⏸</span>
+          <span id="ui-pause-text">暂停刷课</span>
+        </button>
       </div>
 
       <div class="panel">

@@ -10,6 +10,7 @@ import * as Processor from './course/processor.js';
 import * as Search from './course/search.js';
 import { filterCookies, login, LoginConfig, storeCookies } from './login.js';
 import { errorWithRetry, input, waitForSPALoaded } from './utils.js';
+import { waitIfPaused } from './pause.js';
 import { CourseInfo } from './course/search.js';
 import { ActivityInfo } from './activity.js';
 
@@ -291,6 +292,7 @@ class IMSRunner {
     }
 
     for (const item of selected) {
+      await waitIfPaused();
       console.log(chalk.bold('-'.repeat(60)));
       console.log(chalk.cyan(`开始执行课程组: ${item.title}`));
       await this.processCourseGroup(page, item);
@@ -726,6 +728,9 @@ class IMSRunner {
   ) {
     const prefix = workerTag ? `[${workerTag}] ` : '';
 
+    // 暂停闸门：暂停时在此挂起，不发起任何请求（释放带宽），恢复后继续
+    await waitIfPaused();
+
     this.emitProgress({
       kind: 'courseStart',
       groupTitle,
@@ -973,3 +978,6 @@ export const ims = {
 };
 
 export type { RunnerProgressEvent };
+
+// 暂停控制（供 Electron 主进程的 UI 按钮调用）
+export { isPaused, pause, resume, toggle as togglePause, onPauseChange } from './pause.js';

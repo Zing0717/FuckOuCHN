@@ -76,6 +76,9 @@ window.addEventListener('DOMContentLoaded', () => {
       compUpdated: byId('ui-comp-updated'),
       runtimeSession: byId('ui-runtime-session'),
       runtimeToday: byId('ui-runtime-today'),
+      pauseBtn: byId('ui-pause-btn'),
+      pauseIcon: byId('ui-pause-icon'),
+      pauseText: byId('ui-pause-text'),
     };
 
     const state = {
@@ -246,6 +249,34 @@ window.addEventListener('DOMContentLoaded', () => {
       if (ui.runtimeSession) ui.runtimeSession.textContent = fmt(payload?.session);
       if (ui.runtimeToday) ui.runtimeToday.textContent = fmt(payload?.today);
     });
+
+    // ---------- 暂停 / 继续按钮 ----------
+    const renderPauseState = (paused) => {
+      if (!ui.pauseBtn) return;
+      ui.pauseBtn.classList.toggle('paused', !!paused);
+      if (ui.pauseIcon) ui.pauseIcon.textContent = paused ? '▶' : '⏸';
+      if (ui.pauseText) ui.pauseText.textContent = paused ? '继续刷课' : '暂停刷课';
+      ui.pauseBtn.title = paused
+        ? '当前已暂停，点击继续刷课'
+        : '一键暂停/继续刷课（暂停后不占网速）';
+    };
+
+    if (ui.pauseBtn) {
+      ui.pauseBtn.addEventListener('click', () => {
+        ipcRenderer.send('ims:pause:toggle');
+      });
+    }
+
+    ipcRenderer.on('ims:pause:state', (_evt, payload) => {
+      renderPauseState(payload?.paused);
+      pushLog(`[${formatTime(Date.now())}] ${payload?.paused ? '⏸ 刷课已暂停' : '▶ 刷课已继续'}`);
+    });
+
+    // 启动时查询一次当前状态
+    try {
+      ipcRenderer.send('ims:pause:query');
+    } catch { }
+    // ---------- 暂停 / 继续按钮结束 ----------
 
     // initial render
     render();
