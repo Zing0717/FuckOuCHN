@@ -170,8 +170,7 @@ class AIModel {
     options: string[],
   ): Promise<number> {
     if (options.length < 2) {
-      console.error(chalk.red('意料之外的错误, 问题选项数量 < 2 ???'));
-      exit();
+      throw new Error('题目选项数量小于 2，无法作答（跳过该题）');
     }
 
     while (this.#taskQueue.length != 0) {
@@ -209,8 +208,7 @@ class AIModel {
 
     // 检查返回的 choices 是否为空
     if (!content || content.choices.length === 0) {
-      console.error(chalk.red('AI 意料之外的错误：没有返回任何答案'));
-      exit();
+      throw new Error('AI 未返回任何答案（请求失败或响应为空）');
     }
 
     // 提取并解析 AI 返回的答案
@@ -249,8 +247,7 @@ class AIModel {
       throw new Error(`getMultiResponse 仅用于 multiple_selection，当前=${type}`);
     }
     if (options.length < 2) {
-      console.error(chalk.red('意料之外的错误, 问题选项数量 < 2 ???'));
-      exit();
+      throw new Error('题目选项数量小于 2，无法作答（跳过该题）');
     }
 
     while (this.#taskQueue.length != 0) {
