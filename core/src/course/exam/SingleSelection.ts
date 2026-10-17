@@ -23,6 +23,9 @@ class SingleSelection extends BaseSubjectResolver {
   override getBatchRequestData(): BatchRequestItem | null {
     if (this.isPass()) return null;
 
+    // 无选项（如匹配题展开的子题）不请求 AI，避免产生无意义请求
+    if (!this.subject.options || this.subject.options.length === 0) return null;
+
     // 返回过滤后的选项
     const opts = this.subject.options.flatMap((opt) =>
       new Set(this.wrongOptions.map(({ id }) => id)).has(opt.id) ? [] : opt,
@@ -43,6 +46,13 @@ class SingleSelection extends BaseSubjectResolver {
 
   async getAnswer(): Promise<OptionId[]> {
     const { options, description, parentDescription } = this.subject;
+
+    // 平台的部分题型（如 matching 匹配题展开后的子题）会返回 type=single_selection
+    // 但 options 为空数组。此时没有可选项，返回空答案而不是崩溃
+    // （原实现 opts[0].id 会抛 TypeError，导致整场考试中断/400）。
+    if (!options || options.length === 0) {
+      return [];
+    }
 
     if (this.wrongOptions.length == options.length) {
       throw new Error('impossable: all options is wrong!!');
