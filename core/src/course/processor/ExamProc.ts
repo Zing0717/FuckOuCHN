@@ -368,11 +368,16 @@ export default class ExamProc implements Processor {
 
     const [_, examScore] = await this.getHistoryScore(getSubmission);
 
-    if (
-      examScore &&
-      (examScore == this.#totalPoints || examScore > this.#totalPoints)
-    )
+    // 达到及格线（_TOTAL_POINTS，默认 60）即视为完成，不再反复重考。
+    // 原逻辑要求必须满分（== totalPoints），导致已及格（如 88/100）的考试
+    // 被无限重做，卡住整个课程组。
+    const passLine = this.#totalPoints;
+    if (examScore != null && examScore >= passLine) {
+      console.log(
+        `✅ 历史最高分 ${examScore} 已达到及格线 ${passLine}，跳过该考试`,
+      );
       return null;
+    }
 
     // 确实还不知道, 要不要重新获取问题, 有可能不重新获取亦可以? 可以复用?
     const getDistribute = await exam.getDistribute();
